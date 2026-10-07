@@ -19,6 +19,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "spi.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -44,6 +46,29 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+// helper function (not really necessary ngl)
+
+// Added a channel parameter so they can add any channel they wanted
+uint16_t MCP3004read_value(uint8_t channel) {
+	// First initialize the buffer arrays
+	uint8_t pTxData[] = {0b1, (1U << 7) | (channel << 4), 0b0};
+	uint8_t pRxData[3];
+
+	// Pulling the CS line low to raed data
+	HAL_GPIO_WritePin(GPIOB, CS_GPIO_Pin, 0);
+
+	// Using the Transmit and Receive tool
+	HAL_SPI_TransmitReceive(&hspi1, pTxData, pRxData, 3, 10);
+
+	// Pulling the CS line high after communication done
+	HAL_GPIO_WritePin(GPIOB, CS_GPIO_Pin, 1);
+
+	// Grabbing the proper ADC readings (line up with bit positions)
+	uint16_t adc_data = (pRxData[1] & 3U) << 8 | pRxData[2];
+
+	// returning the data
+	return adc_data;
+}
 
 /* USER CODE END PV */
 
@@ -87,7 +112,14 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+  MX_SPI1_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+  // Adding the timer
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  uint16_t adc_value = 0;
+  uint32_t ccr_value = 0;
+  // Start the communication
 
   /* USER CODE END 2 */
 
@@ -98,6 +130,12 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	// Transmitting + reading the data via spi
+	adc_value = MCP3004read_value(0b0);
+	ccr_value = 3200U + (3200U * adc_value)/1023U;
+	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, ccr_value);
+	HAL_Delay(10);
+
   }
   /* USER CODE END 3 */
 }
